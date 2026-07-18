@@ -45,9 +45,10 @@
   window.addEventListener('unhandledrejection', function (ev) { window.__boot('REJECT: ' + (ev.reason && (ev.reason.message || ev.reason))); });
   if (!window.WebGLRenderingContext) window.__boot('この端末/ブラウザはWebGL非対応の可能性');
 </script>
-<script src="three.min.js"></script>
-<script src="OrbitControls.js"></script>
-<script src="segment.js"></script>
-<script src="game.js"></script>
+<!-- ?v= はキャッシュ破り。game.jsを変えたら番号を上げること -->
+<script src="three.min.js?v=2"></script>
+<script src="OrbitControls.js?v=2"></script>
+<script src="segment.js?v=2"></script>
+<script src="game.js?v=2"></script>
 </body>
 </html>
