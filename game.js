@@ -70,7 +70,7 @@
   ground.position.y = -0.05;
   ground.receiveShadow = true;
   scene.add(ground);
-  scatterTown();
+  buildRealBuildings();   // OSMの実在建物（buildings.js）を沿線に建てる
 
   // ---- 中心線（実カーブ）をスプライン化 ----
   // SEGMENT.points は [x(east), z(south)] のメートル。three.jsは (x, y, z)。
@@ -116,8 +116,12 @@
 
   [trackUpThrough, trackDnThrough, trackUpLoop, trackDnLoop].forEach(function (c) { buildTrack(c); });
 
-  // ---- 桜上水の駅（2面4線：島式ホーム2面） ----
+  // ---- 桜上水の駅（2面4線：島式ホーム2面＋橋上駅舎） ----
   buildStation();
+  buildBridgeStationHouse();
+  // ---- 上北沢の駅（相対式2面＋小さな駅舎） ----
+  var uKami = nearestU(center, new THREE.Vector3(stB[0], 0, stB[1]));
+  buildKamikitazawa(uKami);
   addLabel('桜上水', pSakura, 0x1b3a5b);
   addLabel('上北沢', new THREE.Vector3(stB[0], 0, stB[1]), 0x1b3a5b);
 
@@ -165,12 +169,44 @@
   }
 
   // ---- メインループ ----
+  // ---- 前面展望（各停=8000系の運転台にカメラを置く） ----
+  var viewMode = 'orbit';
+  var savedCam = null;
+  function setViewMode(mode) {
+    viewMode = mode;
+    var btn = document.getElementById('viewBtn');
+    if (mode === 'cab') {
+      savedCam = { pos: camera.position.clone(), target: controls.target.clone() };
+      controls.enabled = false;
+      if (btn) btn.textContent = '🚁 上空にもどる';
+    } else {
+      controls.enabled = true;
+      if (savedCam) { camera.position.copy(savedCam.pos); controls.target.copy(savedCam.target); }
+      if (btn) btn.textContent = '🚃 前面展望';
+    }
+  }
+  var viewBtn = document.getElementById('viewBtn');
+  if (viewBtn) viewBtn.addEventListener('click', function () { setViewMode(viewMode === 'cab' ? 'orbit' : 'cab'); });
+
+  function updateCabCamera() {
+    var t = local;                                   // 各停に乗る（待避中に特急が横を通過する）
+    if (!t._curve) return;
+    var L = t._curve.getLength();
+    var headDist = t._uHead * L - 1.2;               // 先頭のわずか後ろ＝運転台
+    var u = Math.max(0.001, Math.min(0.999, headDist / L));
+    var p = t._curve.getPointAt(u);
+    var tan = t._curve.getTangentAt(u);
+    camera.position.set(p.x, 3.1, p.z);
+    camera.lookAt(p.x + tan.x * 60, 2.2, p.z + tan.z * 60);
+  }
+
   var last = performance.now(), booted = false;
   function animate(now) {
     var dt = Math.min((now - last) / 1000, 0.05); last = now;
     try {
       updateTrains(dt);
-      controls.update();
+      if (viewMode === 'cab') updateCabCamera();
+      else controls.update();
       renderer.render(scene, camera);
     } catch (e) {
       if (window.__boot) window.__boot('LOOP: ' + (e && e.message) + '\n' + (e && e.stack ? String(e.stack).split('\n').slice(0, 3).join('\n') : ''));
@@ -273,6 +309,63 @@
     });
   }
 
+  // 桜上水の橋上駅舎：線路をまたぐ箱＋支柱
+  function buildBridgeStationHouse() {
+    var p = center.getPointAt(uSakura), tan = center.getTangentAt(uSakura);
+    var g = new THREE.Group();
+    g.position.set(p.x, 0, p.z);
+    g.rotation.y = Math.atan2(tan.x, tan.z);
+    var wall = new THREE.MeshLambertMaterial({ color: 0xe8e2d6 });
+    var glass = new THREE.MeshStandardMaterial({ color: 0x9fc4d8, metalness: 0.4, roughness: 0.3 });
+    var roof = new THREE.MeshLambertMaterial({ color: 0x40556a });
+    var body = new THREE.Mesh(new THREE.BoxGeometry(26, 3.4, 13), wall);
+    body.position.y = 8.2; body.castShadow = true; g.add(body);
+    var win = new THREE.Mesh(new THREE.BoxGeometry(26.1, 1.2, 13.1), glass);
+    win.position.y = 8.4; g.add(win);
+    var top = new THREE.Mesh(new THREE.BoxGeometry(27.5, 0.5, 14.5), roof);
+    top.position.y = 10.1; g.add(top);
+    [[-11, 5], [-11, -5], [11, 5], [11, -5]].forEach(function (o) {
+      var leg = new THREE.Mesh(new THREE.BoxGeometry(1.1, 6.5, 1.1), wall);
+      leg.position.set(o[0], 3.25, o[1]); leg.castShadow = true; g.add(leg);
+    });
+    scene.add(g);
+  }
+
+  // 上北沢：相対式ホーム2面（線路の外側±4m）＋南口の小さな駅舎
+  function buildKamikitazawa(uK) {
+    var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4 });
+    var roofmat = new THREE.MeshLambertMaterial({ color: 0x4a5a4a });
+    var LEN2 = 45 / LEN;                         // ±45m のホーム
+    [4, -4].forEach(function (side) {
+      var pts = [];
+      for (var i = 0; i <= 30; i++) {
+        var u = uK - LEN2 + (LEN2 * 2) * (i / 30);
+        if (u < 0 || u > 1) continue;
+        var p = center.getPointAt(u), tan = center.getTangentAt(u);
+        var nx = -tan.z, nz = tan.x;
+        pts.push(new THREE.Vector3(p.x + nx * side, 0, p.z + nz * side));
+      }
+      if (pts.length < 2) return;
+      var cv = new THREE.CatmullRomCurve3(pts);
+      var slab = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 1.8, 0.9), pmat);
+      slab.castShadow = true; slab.receiveShadow = true; scene.add(slab);
+      var roof = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 2.1, 4.2), roofmat);
+      scene.add(roof);
+    });
+    // 駅舎（南側ホームの端に小さな箱）
+    var p = center.getPointAt(uK), tan = center.getTangentAt(uK);
+    var nx = -tan.z, nz = tan.x;
+    var house = new THREE.Group();
+    house.position.set(p.x + nx * 9, 0, p.z + nz * 9);
+    house.rotation.y = Math.atan2(tan.x, tan.z);
+    var hw = new THREE.MeshLambertMaterial({ color: 0xefe8da });
+    var hb = new THREE.Mesh(new THREE.BoxGeometry(7, 3.6, 5), hw);
+    hb.position.y = 1.8; hb.castShadow = true; house.add(hb);
+    var hr = new THREE.Mesh(new THREE.BoxGeometry(8, 0.4, 6), new THREE.MeshLambertMaterial({ color: 0x8a4a3a }));
+    hr.position.y = 3.8; house.add(hr);
+    scene.add(house);
+  }
+
   // 高さのある帯（ホーム床/屋根）: 上面のみの板を y に置く
   function ribbonRaised(curve, N, halfW, y) {
     return (function () {
@@ -335,6 +428,7 @@
 
   // 列車をカーブ上の位置 u（先頭）に配置。各車を後ろへ並べて向きも合わせる
   function placeTrain(train, curve, uHead) {
+    train._curve = curve; train._uHead = uHead;   // 前面展望カメラ用に記録
     var L = curve.getLength();
     train.cars.forEach(function (c) {
       var dist = uHead * L - c.userData.spacing - 9;   // 車体中心
@@ -360,19 +454,43 @@
     scene.add(sp);
   }
 
-  // 沿線の街（低ポリのビルをまばらに）
-  function scatterTown() {
-    var mats = [0xcfc6b6, 0xbfb2a0, 0xd8d8d8, 0xc8b8a0].map(function (c) {
-      return new THREE.MeshLambertMaterial({ color: c });
-    });
-    for (var i = 0; i < 140; i++) {
-      var x = (Math.random() - 0.5) * 2200, z = (Math.random() - 0.5) * 1200;
-      if (Math.abs(z) < 40) continue;                 // 線路の帯は空ける
-      var w = 8 + Math.random() * 16, h = 6 + Math.random() * 40, d = 8 + Math.random() * 16;
-      var b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats[i % mats.length]);
-      b.position.set(x, h / 2, z); b.castShadow = true; b.receiveShadow = true;
-      scene.add(b);
+  // 沿線の実在建物（OSMのフットプリント＋高さ）を1つのメッシュに合成して建てる
+  function buildRealBuildings() {
+    if (typeof BUILDINGS === 'undefined' || !BUILDINGS.length) return;
+    var palette = [
+      [0.85, 0.82, 0.76], [0.80, 0.76, 0.70], [0.88, 0.88, 0.88],
+      [0.78, 0.72, 0.66], [0.83, 0.79, 0.72], [0.75, 0.78, 0.80]
+    ];
+    var pos = [], col = [];
+    function pushTri(ax, ay, az, bx, by, bz, cx, cy, cz, c) {
+      pos.push(ax, ay, az, bx, by, bz, cx, cy, cz);
+      for (var k = 0; k < 3; k++) col.push(c[0], c[1], c[2]);
     }
+    for (var bi = 0; bi < BUILDINGS.length; bi++) {
+      var b = BUILDINGS[bi], poly = b.p, h = b.h;
+      var base = palette[bi % palette.length];
+      var roofC = [base[0] * 0.82, base[1] * 0.82, base[2] * 0.84];
+      // 壁（各辺を2三角形で）
+      for (var i = 0; i < poly.length; i++) {
+        var a = poly[i], c2 = poly[(i + 1) % poly.length];
+        pushTri(a[0], 0, a[1], c2[0], 0, c2[1], c2[0], h, c2[1], base);
+        pushTri(a[0], 0, a[1], c2[0], h, c2[1], a[0], h, a[1], base);
+      }
+      // 屋根（多角形を三角形分割）
+      var v2 = poly.map(function (p) { return new THREE.Vector2(p[0], p[1]); });
+      var tris = THREE.ShapeUtils.triangulateShape(v2, []);
+      for (var t2 = 0; t2 < tris.length; t2++) {
+        var i0 = tris[t2][0], i1 = tris[t2][1], i2 = tris[t2][2];
+        pushTri(poly[i0][0], h, poly[i0][1], poly[i1][0], h, poly[i1][1], poly[i2][0], h, poly[i2][1], roofC);
+      }
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    var mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+    mesh.receiveShadow = true;
+    scene.add(mesh);
   }
 
   // ====================== ヘルパー ======================

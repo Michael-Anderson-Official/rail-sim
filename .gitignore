@@ -1,2 +1,4 @@
 node_modules/
 .DS_Store
+buildings_raw.json
+bbox.txt

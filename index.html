@@ -28,6 +28,14 @@
     position: fixed; padding: 7px 16px; border-radius: 20px; color: #14203a;
   }
   #hint { bottom: 54px; text-align: center; font-size: 10px; opacity: .55; }
+  #viewBtn {
+    position: fixed; top: 14px; right: 12px; z-index: 10;
+    font-family: "Hiragino Kaku Gothic ProN", sans-serif; font-size: 13px; font-weight: 700;
+    padding: 9px 14px; border: none; border-radius: 22px;
+    background: rgba(255,255,255,.92); color: #14203a;
+    box-shadow: 0 2px 8px rgba(0,0,0,.18);
+  }
+  #viewBtn:active { transform: scale(.96); }
 </style>
 </head>
 <body>
@@ -35,6 +43,7 @@
 <div id="title" class="hud"><div class="t">京王線 3D ｜ 桜上水〜上北沢</div><div class="s">実データの線路・2面4線・待避のデモ</div></div>
 <div id="hint" class="hud">指でドラッグ＝回転　／　2本指＝ズーム・移動</div>
 <div id="caption"></div>
+<button id="viewBtn" type="button">🚃 前面展望</button>
 <div id="boot" style="position:fixed; top:48%; left:0; right:0; text-align:center; font-size:13px; color:#4a5a6a; font-family:sans-serif; pointer-events:none;">起動中…</div>
 <pre id="err" style="display:none; position:fixed; left:8px; right:8px; bottom:70px; margin:0; padding:10px; background:rgba(190,0,0,.92); color:#fff; font-size:11px; line-height:1.4; white-space:pre-wrap; z-index:99; border-radius:10px; max-height:44%; overflow:auto;"></pre>
 <script>
@@ -46,9 +55,10 @@
   if (!window.WebGLRenderingContext) window.__boot('この端末/ブラウザはWebGL非対応の可能性');
 </script>
 <!-- ?v= はキャッシュ破り。game.jsを変えたら番号を上げること -->
-<script src="three.min.js?v=2"></script>
-<script src="OrbitControls.js?v=2"></script>
-<script src="segment.js?v=2"></script>
-<script src="game.js?v=2"></script>
+<script src="three.min.js?v=3"></script>
+<script src="OrbitControls.js?v=3"></script>
+<script src="segment.js?v=3"></script>
+<script src="buildings.js?v=1"></script>
+<script src="game.js?v=3"></script>
 </body>
 </html>
