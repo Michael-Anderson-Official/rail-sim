@@ -103,8 +103,8 @@
 
   // ---- 列車 ----
   // 下り（東→西）：特急は本線を通過、各停は待避線で待つ
-  var express = makeTrain(4, 0xe4007f);   // 京王ピンク・特急・4両
-  var local = makeTrain(3, 0xd7dbe0);     // 各停・3両
+  var express = makeTrain('KEIO_5000', 5);  // 京王5000系（京王ライナー）＝通過の特急役・5両
+  var local = makeTrain('KEIO_8000', 4);    // 京王8000系（各停）＝待避する各停・4両
   scene.add(express.group); scene.add(local.group);
 
   // ---- 待避のタイムライン（台本制御。本格信号は次スライスで） ----
@@ -255,23 +255,76 @@
     })();
   }
 
-  // 列車：先頭〜後尾の箱をつなぐ
-  function makeTrain(cars, color) {
+  // 京王の車両形式（実車の帯色・塗装をもとにした低ポリ表現）
+  // 車体はローカルZが進行方向（前面は+Z端）、幅はX、高さはY。
+  var TRAIN_TYPES = {
+    // 5000系：京王ライナー。銀車体に赤〜紺のラッピング、黒い前面
+    KEIO_5000: { base: 0xe0e4e9, roof: 0xbabec4, front: 0x1b1f2a, name: '5000系',
+      bands: [{ y: 1.35, h: 0.55, color: 0xd6006f }, { y: 0.82, h: 0.5, color: 0x16295c }], accent: 0xd6006f },
+    // 8000系：ステンレス銀に京王ブルーの帯＋細い赤ライン
+    KEIO_8000: { base: 0xd2d6db, roof: 0xaeb2b8, front: 0x222732, name: '8000系',
+      bands: [{ y: 2.15, h: 0.5, color: 0x0e4aa0 }, { y: 2.5, h: 0.12, color: 0xe4007f }], accent: 0x0e4aa0 },
+    // 7000系：ステンレス銀に青帯＋赤ライン（帯の位置を8000と少し変える）
+    KEIO_7000: { base: 0xd4d8dd, roof: 0xafb3b9, front: 0x242934, name: '7000系',
+      bands: [{ y: 2.2, h: 0.45, color: 0x0e4aa0 }, { y: 1.85, h: 0.12, color: 0xe4007f }], accent: 0x0e4aa0 },
+    // 9000系：ステンレス銀に青＋赤帯、前面は黒い顔
+    KEIO_9000: { base: 0xd8dce1, roof: 0xb2b6bc, front: 0x141821, name: '9000系',
+      bands: [{ y: 2.15, h: 0.5, color: 0x0e4aa0 }, { y: 2.5, h: 0.14, color: 0xe4007f }], accent: 0x0e4aa0 },
+    // 2000系：往年のライトグリーン塗装（レトロ）
+    KEIO_2000: { base: 0x86b96a, roof: 0x6f9e57, front: 0x5f8a49, name: '2000系',
+      bands: [{ y: 2.55, h: 0.16, color: 0xece5cc }], accent: 0xece5cc }
+  };
+
+  // 列車：形式ごとの塗装で、先頭〜後尾の車をつなぐ
+  function makeTrain(typeKey, cars) {
+    var t = TRAIN_TYPES[typeKey] || TRAIN_TYPES.KEIO_8000;
     var group = new THREE.Group();
-    var body = new THREE.MeshStandardMaterial({ color: color, metalness: 0.2, roughness: 0.6 });
-    var win = new THREE.MeshStandardMaterial({ color: 0x1b2733, metalness: 0.5, roughness: 0.3 });
-    var CAR = 18, GAP = 2;
-    var carGeo = new THREE.BoxGeometry(CAR, 3.4, 2.8);
-    var winGeo = new THREE.BoxGeometry(CAR * 0.92, 1.1, 2.9);
+    var baseMat = new THREE.MeshStandardMaterial({ color: t.base, metalness: 0.35, roughness: 0.5 });
+    var roofMat = new THREE.MeshStandardMaterial({ color: t.roof, metalness: 0.3, roughness: 0.6 });
+    var winMat = new THREE.MeshStandardMaterial({ color: 0x10161f, metalness: 0.6, roughness: 0.25 });
+    var frontMat = new THREE.MeshStandardMaterial({ color: t.front, metalness: 0.4, roughness: 0.4 });
+    var lampMat = new THREE.MeshStandardMaterial({ color: 0xfff6d6, emissive: 0x554400, emissiveIntensity: 0.5 });
+    var darkMat = new THREE.MeshStandardMaterial({ color: 0x333840, metalness: 0.6, roughness: 0.4 });
+    var W = 2.9, H = 3.4, CAR = 18, GAP = 2;
     var arr = [];
     for (var i = 0; i < cars; i++) {
       var c = new THREE.Group();
-      var b = new THREE.Mesh(carGeo, body); b.position.y = 2.0; b.castShadow = true; c.add(b);
-      var w = new THREE.Mesh(winGeo, win); w.position.y = 2.5; c.add(w);
+      // 車体
+      var b = new THREE.Mesh(new THREE.BoxGeometry(W, H, CAR), baseMat); b.position.y = 2.0; b.castShadow = true; c.add(b);
+      // 側面の窓帯
+      var w = new THREE.Mesh(new THREE.BoxGeometry(W + 0.04, 1.0, CAR * 0.86), winMat); w.position.y = 2.55; c.add(w);
+      // 形式の帯（側面の横ストライプ）
+      t.bands.forEach(function (bd) {
+        var band = new THREE.Mesh(new THREE.BoxGeometry(W + 0.06, bd.h, CAR * 0.99),
+          new THREE.MeshStandardMaterial({ color: bd.color, metalness: 0.2, roughness: 0.5 }));
+        band.position.y = bd.y; c.add(band);
+      });
+      // 屋根＋クーラー
+      var roof = new THREE.Mesh(new THREE.BoxGeometry(W * 0.82, 0.45, CAR * 0.96), roofMat); roof.position.y = 3.75; c.add(roof);
+      for (var k = 0; k < 2; k++) {
+        var ac = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.35, 2.4), roofMat); ac.position.set(0, 4.05, -4.5 + k * 9); c.add(ac);
+      }
+      // パンタグラフ（2両目に）
+      if (i === 1) {
+        var pgBase = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.12, 1.4), darkMat); pgBase.position.set(0, 4.2, 3); c.add(pgBase);
+        var pgArm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.0, 0.1), darkMat); pgArm.position.set(0, 4.6, 3); pgArm.rotation.x = 0.5; c.add(pgArm);
+      }
+      // 先頭車の前面（+Z端）
+      if (i === 0) {
+        var fp = new THREE.Mesh(new THREE.BoxGeometry(W, H * 0.94, 0.5), frontMat); fp.position.set(0, 2.05, CAR / 2 + 0.1); fp.castShadow = true; c.add(fp);
+        var fw = new THREE.Mesh(new THREE.BoxGeometry(W * 0.66, 1.15, 0.55), winMat); fw.position.set(0, 2.8, CAR / 2 + 0.16); c.add(fw);
+        [-0.95, 0.95].forEach(function (x) {
+          var lm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.32, 0.3), lampMat); lm.position.set(x, 1.45, CAR / 2 + 0.22); c.add(lm);
+        });
+        // 種別・行先の光る表示（形式のアクセント色）
+        var ds = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.42, 0.3),
+          new THREE.MeshStandardMaterial({ color: t.accent, emissive: t.accent, emissiveIntensity: 0.35 }));
+        ds.position.set(0, 3.4, CAR / 2 + 0.2); c.add(ds);
+      }
       c.userData.spacing = i * (CAR + GAP);
       group.add(c); arr.push(c);
     }
-    return { group: group, cars: arr, carLen: CAR + GAP, total: cars * (CAR + GAP) };
+    return { group: group, cars: arr, carLen: CAR + GAP, total: cars * (CAR + GAP), typeName: t.name };
   }
 
   // 列車をカーブ上の位置 u（先頭）に配置。各車を後ろへ並べて向きも合わせる
