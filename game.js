@@ -234,18 +234,20 @@
 
   // 待避線のふくらみ：窓の外は本線と同じ、中央で外へ +4m（passing loop）
   function loopBump(u) {
-    var d = Math.abs(u - uSakura);
-    if (d > WINDOW) return 0;
-    var t = 1 - d / WINDOW;                  // 端0→中央1
-    return smoothstep(t) * 6.5;              // 最大6.5mふくらむ（島ホームを挟める間隔）
+    // 10両編成(210m)のホーム全長で平行になるよう、±110mは全開・その外60mで閉じる台形
+    var d = Math.abs(u - uSakura) * LEN;
+    if (d < 110) return 6.5;
+    if (d < 170) return smoothstep(1 - (d - 110) / 60) * 6.5;
+    return 0;
   }
   // 上北沢の島式ホームぶんのふくらみ：駅の前後で上下線が外へ開いて島を挟む
   var KAMI_WINDOW = 90 / LEN;
   function kamiBump(u) {
-    var d = Math.abs(u - uKami);
-    if (d > KAMI_WINDOW) return 0;
-    var t = 1 - d / KAMI_WINDOW;
-    return smoothstep(t) * 1.3;              // 最大1.3m外へ（島ホーム幅を確保）
+    // 島ホーム210m(10両)の全長で全開・その外60mで閉じる台形
+    var d = Math.abs(u - uKami) * LEN;
+    if (d < 105) return 1.3;
+    if (d < 165) return smoothstep(1 - (d - 105) / 60) * 1.3;
+    return 0;
   }
 
   // 横オフセット付きの線路カーブを作る（法線方向へずらす）
@@ -484,7 +486,7 @@
     [5.45, -5.45].forEach(function (side) {
       var slabPts = [];
       for (var i = 0; i <= 40; i++) {
-        var u = uSakura - WINDOW * 0.55 + (WINDOW * 1.1) * (i / 40);   // 待避線が十分開いている区間だけ
+        var u = uSakura - 105 / LEN + (210 / LEN) * (i / 40);   // 実物の10両対応=210mホーム
         if (u < 0 || u > 1) continue;
         var p = center.getPointAt(u), tan = center.getTangentAt(u);
         var nx = -tan.z, nz = tan.x;
@@ -529,7 +531,7 @@
   function buildKamikitazawa(uK) {
     var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4, side: THREE.DoubleSide });
     var roofmat = new THREE.MeshLambertMaterial({ color: 0x4a5a4a, side: THREE.DoubleSide });
-    var LEN2 = 45 / LEN;                         // ±45m のホーム
+    var LEN2 = 105 / LEN;                        // ±105m＝実物の10両対応210mホーム
     // 島ホーム＝中心線上（線路は±2mなので、その内側1面）
     var pts = [];
     for (var i = 0; i <= 30; i++) {
