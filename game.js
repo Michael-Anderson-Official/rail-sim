@@ -116,8 +116,50 @@
     // 壁と屋根のパレット（建物IDで1軒ずつ色を変える）
     var WALLS = [[0.93, 0.91, 0.86], [0.88, 0.86, 0.82], [0.92, 0.92, 0.92], [0.86, 0.82, 0.75], [0.90, 0.87, 0.80], [0.84, 0.86, 0.88], [0.95, 0.93, 0.88]];
     var ROOFS = [[0.42, 0.45, 0.50], [0.52, 0.38, 0.33], [0.38, 0.42, 0.38], [0.45, 0.45, 0.47], [0.55, 0.48, 0.40], [0.35, 0.38, 0.45]];
-    // 屋根/壁の塗り分け：頂点法線がタイルの「上」を向いていれば屋根
-    function paintTile(node, rotMatrix) {
+    // 線路中心線のサンプル点（8m刻み）。線路帯に重なるPLATEAU建物（実在の駅ホーム等）の除去に使う
+    var trackPts = [];
+    (function () {
+      var P = SEGMENT.points;
+      for (var i = 1; i < P.length; i++) {
+        var a = P[i - 1], b = P[i];
+        var d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        var n = Math.max(1, Math.ceil(d / 8));
+        for (var k = 0; k < n; k++) trackPts.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+      }
+    })();
+
+    // 屋根/壁の塗り分け＋線路帯の建物除去
+    function paintTile(node, rotMatrix, worldMatrix) {
+      var inv = new THREE.Matrix4().copy(worldMatrix).invert();
+      var sink = new THREE.Vector3(0, -500, 0).applyMatrix4(inv);   // 「消す」＝この1点に潰す
+      var tmpV = new THREE.Vector3();
+      node.traverse(function (o) {
+        if (!o.isMesh) return;
+        var g = o.geometry, pos = g.attributes.position, bid = g.getAttribute('_batchid');
+        if (!bid) return;
+        var sums = {}, n = pos.count;
+        for (var i = 0; i < n; i++) {
+          tmpV.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(worldMatrix);
+          var id = bid.getX(i) | 0;
+          var s = sums[id] || (sums[id] = [0, 0, 0]);
+          s[0] += tmpV.x; s[1] += tmpV.z; s[2]++;
+        }
+        var hidden = {};
+        for (var idk in sums) {
+          var s2 = sums[idk], cx = s2[0] / s2[2], cz = s2[1] / s2[2];
+          for (var p = 0; p < trackPts.length; p++) {
+            var dx = cx - trackPts[p][0], dz = cz - trackPts[p][1];
+            if (dx * dx + dz * dz < 64) { hidden[idk] = 1; break; }   // 中心線から8m以内→除去
+          }
+        }
+        for (var j = 0; j < n; j++) {
+          if (hidden[bid.getX(j) | 0]) pos.setXYZ(j, sink.x, sink.y, sink.z);
+        }
+        pos.needsUpdate = true;
+      });
+      paintColors(node, rotMatrix);
+    }
+    function paintColors(node, rotMatrix) {
       var e = rotMatrix.elements;
       var ux = e[1], uy = e[5], uz = e[9];   // モデル空間での「上」ベクトル（回転行列の2行目）
       node.traverse(function (o) {
@@ -152,11 +194,12 @@
         loader.parse(ab, '', function (g) {
           var node = g.scene;
           var m = tileMatrix(t.c, true);
-          paintTile(node, m);   // 屋根/壁/建物ごとの塗り分け
+          // タイルごとに実測した地面高(t.g)で接地（Draco実デコードで事前計算済み）
+          var M2 = new THREE.Matrix4().makeTranslation(0, -(t.g || 80), 0).multiply(m);
+          paintTile(node, m, M2);   // 線路帯の実在駅構造物を除去＋屋根/壁/建物ごとの塗り分け
           var holder = new THREE.Group();
           holder.matrixAutoUpdate = false;
-          // タイルごとに実測した地面高(t.g)で接地（Draco実デコードで事前計算済み）
-          holder.matrix.makeTranslation(0, -(t.g || 80), 0).multiply(m);
+          holder.matrix.copy(M2);
           holder.add(node);
           group.add(holder);
           done();
