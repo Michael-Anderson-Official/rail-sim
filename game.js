@@ -110,7 +110,9 @@
 
     var group = new THREE.Group();
     var pmat = new THREE.MeshLambertMaterial({ color: 0xded8cc, side: THREE.DoubleSide });
-    var loaded = 0, failed = 0, mode = null;   // mode: true=Rx90あり / false=なし（初回タイルで自動判定）
+    var loaded = 0, failed = 0;
+    // 軸の向きはDracoを実デコードして検証済み：glTF y-up → ECEF z-up の Rx(+90°) が正
+    // （node側の検証で up=80..98m ＝標高＋ジオイド＋建物高と一致することを確認）
     PLATEAU_TILES.forEach(function (t) {
       fetch('plateau/' + t.f).then(function (r) {
         if (!r.ok) throw new Error('http ' + r.status);
@@ -125,32 +127,15 @@
               o.castShadow = false; o.receiveShadow = true;
             }
           });
-          if (mode === null) {
-            // 高さ方向の広がりが小さくなる向きが正解（建物は横に広く縦に低い）
-            node.updateMatrixWorld(true);
-            var hB = yExtent(node, tileMatrix(t.c, true));
-            var hA = yExtent(node, tileMatrix(t.c, false));
-            mode = hB <= hA;
-          }
           var holder = new THREE.Group();
           holder.matrixAutoUpdate = false;
-          holder.matrix.copy(tileMatrix(t.c, mode));
+          holder.matrix.copy(tileMatrix(t.c, true));
           holder.add(node);
           group.add(holder);
           done();
         }, function () { failed++; done(); });
       }).catch(function () { failed++; done(); });
     });
-    function yExtent(node, mat) {
-      var box = new THREE.Box3();
-      var tmp = new THREE.Group();
-      tmp.matrixAutoUpdate = false; tmp.matrix.copy(mat);
-      tmp.add(node);
-      tmp.updateMatrixWorld(true);
-      box.setFromObject(tmp);
-      tmp.remove(node);
-      return box.max.y - box.min.y;
-    }
     function done() {
       loaded++;
       if (loaded < PLATEAU_TILES.length) return;
