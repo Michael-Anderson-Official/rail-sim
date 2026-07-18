@@ -145,13 +145,12 @@
           s[0] += tmpV.x; s[1] += tmpV.z; s[2]++;
         }
         var hidden = {};
-        var stK = SEGMENT.stations.kamikitazawa;   // 上北沢駅周辺は実在の駅舎・上家を残す（実測で線路と干渉しない位置）
+        // 線路帯(中心線8m以内)の実在構造物は駅舎含め全区間で除去（前面展望を優先。v16の駅周辺例外は撤廃）
         for (var idk in sums) {
           var s2 = sums[idk], cx = s2[0] / s2[2], cz = s2[1] / s2[2];
-          if (Math.hypot(cx - stK[0], cz - stK[1]) < 70) continue;
           for (var p = 0; p < trackPts.length; p++) {
             var dx = cx - trackPts[p][0], dz = cz - trackPts[p][1];
-            if (dx * dx + dz * dz < 64) { hidden[idk] = 1; break; }   // 中心線から8m以内→除去
+            if (dx * dx + dz * dz < 64) { hidden[idk] = 1; break; }
           }
         }
         for (var j = 0; j < n; j++) {
