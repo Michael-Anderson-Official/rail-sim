@@ -43,12 +43,15 @@
   var camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 4000);
   camera.position.set(120, 180, 320);
 
-  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  // 地図アプリ流の操作（1本指=移動、2本指=回転・ズーム）。回転主体のOrbitからMapControlsへ変更
+  var controls = new THREE.MapControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.maxPolarAngle = Math.PI * 0.49;   // 地面より下に回り込まない
-  controls.minDistance = 40;
-  controls.maxDistance = 900;
+  controls.dampingFactor = 0.12;
+  controls.screenSpacePanning = false;       // パンは地面に沿って滑る
+  controls.maxPolarAngle = Math.PI * 0.47;   // 地面より下に回り込まない
+  controls.minDistance = 25;
+  controls.maxDistance = 1300;
+  controls.zoomSpeed = 1.15;
 
   // ---- ライティング ----
   var hemi = new THREE.HemisphereLight(0xffffff, 0x788c78, 0.85);
