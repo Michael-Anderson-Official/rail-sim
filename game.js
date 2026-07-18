@@ -82,6 +82,7 @@
 
   // 中心線上で桜上水に一番近いパラメータ u を求める
   var uSakura = nearestU(center, pSakura);
+  var uKami = nearestU(center, new THREE.Vector3(stB[0], 0, stB[1]));   // 上北沢（島式1面2線）
   var LEN = center.getLength();
   var WINDOW = 150 / LEN;                    // 待避線が枝分かれする窓（±150m）
 
@@ -91,6 +92,14 @@
     if (d > WINDOW) return 0;
     var t = 1 - d / WINDOW;                  // 端0→中央1
     return smoothstep(t) * 4;                // 最大4mふくらむ
+  }
+  // 上北沢の島式ホームぶんのふくらみ：駅の前後で上下線が外へ開いて島を挟む
+  var KAMI_WINDOW = 90 / LEN;
+  function kamiBump(u) {
+    var d = Math.abs(u - uKami);
+    if (d > KAMI_WINDOW) return 0;
+    var t = 1 - d / KAMI_WINDOW;
+    return smoothstep(t) * 1.9;              // 最大1.9m外へ（島ホーム幅を確保）
   }
 
   // 横オフセット付きの線路カーブを作る（法線方向へずらす）
@@ -107,20 +116,19 @@
     return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
   }
 
-  // 4本の線路：本線±2m、待避線は本線から外へふくらむ
+  // 4本の線路：本線±2m（上北沢では島ホームを挟んで外へ開く）、待避線は桜上水で外へふくらむ
   var GAUGE = 1.6;
-  var trackUpThrough = offsetCurve(function () { return 2; });    // 上り本線
-  var trackDnThrough = offsetCurve(function () { return -2; });   // 下り本線（通過）
-  var trackUpLoop = offsetCurve(function (u) { return 2 + loopBump(u); });   // 上り待避
-  var trackDnLoop = offsetCurve(function (u) { return -2 - loopBump(u); });  // 下り待避
+  var trackUpThrough = offsetCurve(function (u) { return 2 + kamiBump(u); });    // 上り本線
+  var trackDnThrough = offsetCurve(function (u) { return -2 - kamiBump(u); });   // 下り本線（通過）
+  var trackUpLoop = offsetCurve(function (u) { return 2 + kamiBump(u) + loopBump(u); });   // 上り待避
+  var trackDnLoop = offsetCurve(function (u) { return -2 - kamiBump(u) - loopBump(u); });  // 下り待避
 
   [trackUpThrough, trackDnThrough, trackUpLoop, trackDnLoop].forEach(function (c) { buildTrack(c); });
 
   // ---- 桜上水の駅（2面4線：島式ホーム2面＋橋上駅舎） ----
   buildStation();
   buildBridgeStationHouse();
-  // ---- 上北沢の駅（相対式2面＋小さな駅舎） ----
-  var uKami = nearestU(center, new THREE.Vector3(stB[0], 0, stB[1]));
+  // ---- 上北沢の駅（島式1面2線＋小さな駅舎） ----
   buildKamikitazawa(uKami);
   addLabel('桜上水', pSakura, 0x1b3a5b);
   addLabel('上北沢', new THREE.Vector3(stB[0], 0, stB[1]), 0x1b3a5b);
@@ -331,32 +339,31 @@
     scene.add(g);
   }
 
-  // 上北沢：相対式ホーム2面（線路の外側±4m）＋南口の小さな駅舎
+  // 上北沢：島式1面2線（上下線に挟まれた島ホーム）＋構内踏切側の小さな駅舎
   function buildKamikitazawa(uK) {
     var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4 });
     var roofmat = new THREE.MeshLambertMaterial({ color: 0x4a5a4a });
     var LEN2 = 45 / LEN;                         // ±45m のホーム
-    [4, -4].forEach(function (side) {
-      var pts = [];
-      for (var i = 0; i <= 30; i++) {
-        var u = uK - LEN2 + (LEN2 * 2) * (i / 30);
-        if (u < 0 || u > 1) continue;
-        var p = center.getPointAt(u), tan = center.getTangentAt(u);
-        var nx = -tan.z, nz = tan.x;
-        pts.push(new THREE.Vector3(p.x + nx * side, 0, p.z + nz * side));
-      }
-      if (pts.length < 2) return;
+    // 島ホーム＝中心線上（線路は±2mなので、その内側1面）
+    var pts = [];
+    for (var i = 0; i <= 30; i++) {
+      var u = uK - LEN2 + (LEN2 * 2) * (i / 30);
+      if (u < 0 || u > 1) continue;
+      pts.push(center.getPointAt(u));
+    }
+    if (pts.length >= 2) {
       var cv = new THREE.CatmullRomCurve3(pts);
-      var slab = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 1.8, 0.9), pmat);
+      var slab = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 1.9, 0.9), pmat);
       slab.castShadow = true; slab.receiveShadow = true; scene.add(slab);
-      var roof = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 2.1, 4.2), roofmat);
+      var roof = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 2.2, 4.2), roofmat);
       scene.add(roof);
-    });
-    // 駅舎（南側ホームの端に小さな箱）
-    var p = center.getPointAt(uK), tan = center.getTangentAt(uK);
+    }
+    // 駅舎（ホーム端の脇に小さな箱＝駅出入口のイメージ）
+    var uEnd = Math.min(1, uK + LEN2);
+    var p = center.getPointAt(uEnd), tan = center.getTangentAt(uEnd);
     var nx = -tan.z, nz = tan.x;
     var house = new THREE.Group();
-    house.position.set(p.x + nx * 9, 0, p.z + nz * 9);
+    house.position.set(p.x + nx * 7, 0, p.z + nz * 7);
     house.rotation.y = Math.atan2(tan.x, tan.z);
     var hw = new THREE.MeshLambertMaterial({ color: 0xefe8da });
     var hb = new THREE.Mesh(new THREE.BoxGeometry(7, 3.6, 5), hw);
