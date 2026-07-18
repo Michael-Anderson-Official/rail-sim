@@ -5,3 +5,4 @@ bbox.txt
 plateau/*.b3dm
 plateau_tileset.json
 roads_raw.json
+rail_raw.json

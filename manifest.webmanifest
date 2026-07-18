@@ -1,7 +1,7 @@
 {
-  "name": "京王線 3D — 桜上水〜上北沢",
+  "name": "京王線 3D — 下高井戸〜八幡山",
   "short_name": "京王線3D",
-  "description": "実データの京王線を3Dで。2面4線・待避のデモ。",
+  "description": "実データの京王線を3Dで。4駅3.2km・待避のデモ。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

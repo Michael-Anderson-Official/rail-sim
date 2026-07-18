@@ -30,7 +30,7 @@
   // ---- シーンの基本 ----
   var scene = new THREE.Scene();
   scene.background = new THREE.Color(0xbcd4e6);
-  scene.fog = new THREE.Fog(0xbcd4e6, 600, 1400);
+  scene.fog = new THREE.Fog(0xbcd4e6, 700, 1900);   // 3.2km区間: 引きでも駅2〜3個ぶん見える距離
 
   var renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -50,7 +50,7 @@
   controls.screenSpacePanning = false;       // パンは地面に沿って滑る
   controls.maxPolarAngle = Math.PI * 0.47;   // 地面より下に回り込まない
   controls.minDistance = 25;
-  controls.maxDistance = 1300;
+  controls.maxDistance = 1700;
   controls.zoomSpeed = 1.15;
 
   // ---- ライティング ----
@@ -61,12 +61,12 @@
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   var sc = sun.shadow.camera;
-  sc.left = -600; sc.right = 600; sc.top = 400; sc.bottom = -400; sc.near = 1; sc.far = 1200;
+  sc.left = -1500; sc.right = 1500; sc.top = 550; sc.bottom = -550; sc.near = 1; sc.far = 1600;
   scene.add(sun);
 
   // ---- 地面（沿線の街をほのめかす低ポリ） ----
   var ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(3000, 2000),
+    new THREE.PlaneGeometry(4200, 2400),
     new THREE.MeshLambertMaterial({ color: 0x9bb08a })
   );
   ground.rotation.x = -Math.PI / 2;
@@ -258,24 +258,30 @@
   // SEGMENT.points は [x(east), z(south)] のメートル。three.jsは (x, y, z)。
   var centerPts = SEGMENT.points.map(function (p) { return new THREE.Vector3(p[0], 0, p[1]); });
   var center = new THREE.CatmullRomCurve3(centerPts, false, 'catmullrom', 0.5);
-  var stA = SEGMENT.stations.sakurajosui;   // 桜上水（東）
-  var stB = SEGMENT.stations.kamikitazawa;  // 上北沢（西）
+  var stA = SEGMENT.stations.sakurajosui;   // 桜上水
+  var stB = SEGMENT.stations.kamikitazawa;  // 上北沢
+  var stC = SEGMENT.stations.shimotakaido;  // 下高井戸（東端側）
+  var stD = SEGMENT.stations.hachimanyama;  // 八幡山（西端側）
   var pSakura = new THREE.Vector3(stA[0], 0, stA[1]);
 
-  // 中心線上で桜上水に一番近いパラメータ u を求める
+  // 中心線上で各駅に一番近いパラメータ u を求める
   var uSakura = nearestU(center, pSakura);
   var uKami = nearestU(center, new THREE.Vector3(stB[0], 0, stB[1]));   // 上北沢（島式1面2線）
+  var uShimo = nearestU(center, new THREE.Vector3(stC[0], 0, stC[1]));  // 下高井戸（相対式2面2線）
+  var uHachi = nearestU(center, new THREE.Vector3(stD[0], 0, stD[1]));  // 八幡山（2面4線・待避可）
   var LEN = center.getLength();
   var WINDOW = 150 / LEN;                    // 待避線が枝分かれする窓（±150m）
 
-  // 待避線のふくらみ：窓の外は本線と同じ、中央で外へ +4m（passing loop）
-  function loopBump(u) {
+  // 待避線のふくらみ：窓の外は本線と同じ、駅の中央で外へ開く（passing loop）
+  // 桜上水と八幡山の2駅が待避駅
+  function loopBumpAt(u, uStn) {
     // 10両編成(210m)のホーム全長で平行になるよう、±110mは全開・その外60mで閉じる台形
-    var d = Math.abs(u - uSakura) * LEN;
+    var d = Math.abs(u - uStn) * LEN;
     if (d < 110) return 6.5;
     if (d < 170) return smoothstep(1 - (d - 110) / 60) * 6.5;
     return 0;
   }
+  function loopBump(u) { return loopBumpAt(u, uSakura) + loopBumpAt(u, uHachi); }
   // 上北沢の島式ホームぶんのふくらみ：駅の前後で上下線が外へ開いて島を挟む
   var KAMI_WINDOW = 90 / LEN;
   function kamiBump(u) {
@@ -288,7 +294,7 @@
 
   // 横オフセット付きの線路カーブを作る（法線方向へずらす）
   function offsetCurve(baseOffsetFn) {
-    var N = 240, pts = [];
+    var N = 560, pts = [];   // 全長3.2km→約6m間隔（待避線の開閉台形が滑らかに出る密度）
     for (var i = 0; i <= N; i++) {
       var u = i / N;
       var p = center.getPointAt(u);
@@ -324,9 +330,10 @@
     for (var side = -1; side <= 1; side += 2) {
       for (var s = spacing / 2; s < LEN && idx < count; s += spacing) {
         var u = s / LEN;
-        var d = Math.abs(u - uSakura);
-        if (d < WINDOW) continue;                      // 駅構内には植えない
+        if (Math.abs(u - uSakura) < WINDOW) continue;  // 駅構内には植えない
+        if (Math.abs(u - uHachi) < WINDOW) continue;
         if (Math.abs(u - uKami) < KAMI_WINDOW) continue;
+        if (Math.abs(u - uShimo) < KAMI_WINDOW) continue;
         var p = center.getPointAt(Math.min(1, u)), tan = center.getTangentAt(Math.min(1, u));
         var nx = -tan.z, nz = tan.x;
         var off = side * (10.5 + ((idx * 7919) % 100) / 100 * jitter);
@@ -347,13 +354,18 @@
     scene.add(crown); scene.add(trunk);
   }
 
-  // ---- 桜上水の駅（2面4線：島式ホーム2面＋橋上駅舎） ----
-  buildStation();
+  // ---- 桜上水・八幡山（2面4線：島式ホーム2面。桜上水は橋上駅舎付き） ----
+  buildIslandLoopStation(uSakura);
+  buildIslandLoopStation(uHachi);
   buildBridgeStationHouse();
   // ---- 上北沢の駅（島式1面2線＋小さな駅舎） ----
   buildKamikitazawa(uKami);
+  // ---- 下高井戸の駅（相対式2面2線。カーブ上のホーム） ----
+  buildShimotakaido(uShimo);
   addLabel('桜上水', pSakura, 0x1b3a5b);
   addLabel('上北沢', new THREE.Vector3(stB[0], 0, stB[1]), 0x1b3a5b);
+  addLabel('下高井戸', new THREE.Vector3(stC[0], 0, stC[1]), 0x1b3a5b);
+  addLabel('八幡山', new THREE.Vector3(stD[0], 0, stD[1]), 0x1b3a5b);
 
   // ---- 列車 ----
   // 下り（東→西）：特急は本線を通過、各停は待避線で待つ
@@ -362,40 +374,59 @@
   scene.add(express.group); scene.add(local.group);
 
   // ---- 待避のタイムライン（台本制御。本格信号は次スライスで） ----
-  // 各停は uStop で停車、特急が通過してから発車する
-  var uStopLoop = uSakura;                 // 各停が待避で停まる位置（中心線パラメータ基準）
-  var loopLen = trackDnLoop.getLength();
-  var thrLen = trackDnThrough.getLength();
+  // 下り各停: 下高井戸→桜上水(待避)→上北沢→八幡山と各駅に停車。
+  // 特急は各停が桜上水で待避している間に本線を通過して先へ抜ける
   var caption = document.getElementById('caption');
 
-  var T = 0, CYCLE = 26;
+  // キーフレーム [時刻, u]。u同士が同じ区間=停車。区間の走行はease補間
+  var locPlan = [
+    [0, 0.0],
+    [6, uShimo], [13, uShimo],        // 下高井戸 停車
+    [28, uSakura], [46, uSakura],     // 桜上水 待避線で特急待ち
+    [60, uKami], [66, uKami],         // 上北沢 停車
+    [78, uHachi], [86, uHachi],       // 八幡山 到着・停車
+  ];
+  var expPlan = [[24, 0.0], [48, 1.0]];   // 特急: 東端→西端を一気に通過
+  var CYCLE = 90;
+
+  function planU(plan, t) {
+    if (t <= plan[0][0]) return plan[0][1];
+    for (var i = 1; i < plan.length; i++) {
+      if (t <= plan[i][0]) {
+        var a = plan[i - 1], b = plan[i];
+        if (a[1] === b[1]) return a[1];
+        return a[1] + (b[1] - a[1]) * ease((t - a[0]) / (b[0] - a[0]));
+      }
+    }
+    return plan[plan.length - 1][1];
+  }
+
+  var T = 0;
   function updateTrains(dt) {
     T = (T + dt) % CYCLE;
 
-    // --- 各停（下り待避線）---
-    // 0-8s: 進入して減速→停車、8-18s: 待避で停車、18-26s: 発車して西へ
-    var locU, locStopped = false;
-    if (T < 8) {
-      locU = ease(T / 8) * uStopLoop;                 // 進入して停車位置へ
-    } else if (T < 18) {
-      locU = uStopLoop; locStopped = true;            // 待避中
-    } else {
-      locU = uStopLoop + ease((T - 18) / 8) * (1 - uStopLoop); // 発車して終端へ
-    }
-    placeTrain(local, trackDnLoop, locU);
+    // --- 各停（下り待避線カーブ上を走る。待避駅以外では本線と同じ線形）---
+    local.group.visible = T < 88;
+    placeTrain(local, trackDnLoop, planU(locPlan, T));
 
-    // --- 特急（下り本線）：各停が待避に入った頃に通過 ---
-    var exU;
-    if (T < 6) { express.group.visible = false; exU = 0; }
-    else { express.group.visible = true; exU = ease((T - 6) / 14); }  // 6-20sで一気に通過
-    if (exU > 1) exU = 1;
-    placeTrain(express, trackDnThrough, exU);
+    // --- 特急（下り本線）---
+    var exVisible = T >= expPlan[0][0] && T <= expPlan[1][0] + 1;
+    express.group.visible = exVisible;
+    placeTrain(express, trackDnThrough, planU(expPlan, T));
 
     // 実況キャプション
-    if (T < 8) caption.textContent = '各停、桜上水の待避線に進入…';
-    else if (T < 14) caption.textContent = '各停は待避線で停車。特急が本線を通過します';
-    else if (T < 18) caption.textContent = '特急、通過。';
-    else caption.textContent = '各停、発車。上北沢へ。';
+    var c;
+    if (T < 6) c = '各停、下高井戸へ';
+    else if (T < 13) c = '下高井戸、停車中（世田谷線のりかえ）';
+    else if (T < 28) c = '各停、桜上水へ。後ろから特急が迫ります';
+    else if (T < 33) c = '各停は桜上水の待避線に入りました';
+    else if (T < 42) c = '特急が本線を通過します！';
+    else if (T < 46) c = '特急、通過。各停はまもなく発車';
+    else if (T < 60) c = '各停、発車。上北沢へ';
+    else if (T < 66) c = '上北沢、停車中';
+    else if (T < 78) c = '各停、八幡山へ';
+    else c = '八幡山、到着。（特急はこの先の芦花公園方面へ）';
+    caption.textContent = c;
   }
 
   // ---- メインループ ----
@@ -458,7 +489,7 @@
 
   // 線路：バラスト（帯）＋2本のレール＋枕木（インスタンス）
   function buildTrack(curve) {
-    var N = 200;
+    var N = 480;   // 3.2kmで約7m間隔
     var pts = curve.getSpacedPoints(N);
     // バラスト帯
     var ballastGeo = ribbonGeometry(curve, N, 1.9, 0.02);
@@ -514,15 +545,15 @@
     return g;
   }
 
-  // 桜上水の駅：2面の島式ホーム＋上屋
-  function buildStation() {
+  // 2面4線の待避駅（桜上水・八幡山）：2面の島式ホーム＋上屋
+  function buildIslandLoopStation(uStn) {
     var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4, side: THREE.DoubleSide });
     var roofmat = new THREE.MeshLambertMaterial({ color: 0x3a4a5a, side: THREE.DoubleSide });
     // 島式ホームは「本線(±2.2)と待避線(±8.7)の真ん中」＝±5.45。幅は車両限界に合わせる
     [5.45, -5.45].forEach(function (side) {
       var slabPts = [];
       for (var i = 0; i <= 40; i++) {
-        var u = uSakura - 105 / LEN + (210 / LEN) * (i / 40);   // 実物の10両対応=210mホーム
+        var u = uStn - 105 / LEN + (210 / LEN) * (i / 40);   // 実物の10両対応=210mホーム
         if (u < 0 || u > 1) continue;
         var p = center.getPointAt(u), tan = center.getTangentAt(u);
         var nx = -tan.z, nz = tan.x;
@@ -537,6 +568,28 @@
       slab.castShadow = true; slab.receiveShadow = true; scene.add(slab);
       // 上屋（薄い屋根）
       var roof = new THREE.Mesh(ribbonRaised(slabCurve, slabPts.length * 3, 1.7, 4.4), roofmat);
+      scene.add(roof);
+    });
+  }
+
+  // 下高井戸：相対式2面2線（カーブ上のサイドホーム）＋小さな上屋
+  function buildShimotakaido(uStn) {
+    var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4, side: THREE.DoubleSide });
+    var roofmat = new THREE.MeshLambertMaterial({ color: 0x4a4a5a, side: THREE.DoubleSide });
+    [5.2, -5.2].forEach(function (side) {
+      var pts = [];
+      for (var i = 0; i <= 40; i++) {
+        var u = uStn - 105 / LEN + (210 / LEN) * (i / 40);   // 10両対応210m
+        if (u < 0 || u > 1) continue;
+        var p = center.getPointAt(u), tan = center.getTangentAt(u);
+        var nx = -tan.z, nz = tan.x;
+        pts.push(new THREE.Vector3(p.x + nx * side, 0, p.z + nz * side));
+      }
+      if (pts.length < 2) return;
+      var cv = new THREE.CatmullRomCurve3(pts);
+      var slab = new THREE.Mesh(ribbonRaised(cv, pts.length * 3, 1.4, 0.9), pmat);
+      slab.castShadow = true; slab.receiveShadow = true; scene.add(slab);
+      var roof = new THREE.Mesh(ribbonRaised(cv, pts.length * 3, 1.6, 4.4), roofmat);
       scene.add(roof);
     });
   }
@@ -730,8 +783,8 @@
   function ease(t) { t = Math.max(0, Math.min(1, t)); return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
   function nearestU(curve, target) {
     var best = 0, bd = Infinity;
-    for (var i = 0; i <= 400; i++) {
-      var u = i / 400, p = curve.getPointAt(u), d = p.distanceToSquared(target);
+    for (var i = 0; i <= 1000; i++) {   // 3.2kmで約3.2m刻み
+      var u = i / 1000, p = curve.getPointAt(u), d = p.distanceToSquared(target);
       if (d < bd) { bd = d; best = u; }
     }
     return best;
