@@ -7,6 +7,26 @@
 (function () {
   'use strict';
 
+  // 京王の車両形式（実車の帯色・塗装をもとにした低ポリ表現）。makeTrain()より先に定義する必要がある。
+  // 車体はローカルZが進行方向（前面は+Z端）、幅はX、高さはY。
+  var TRAIN_TYPES = {
+    // 5000系：京王ライナー。銀車体に赤〜紺のラッピング、黒い前面
+    KEIO_5000: { base: 0xe0e4e9, roof: 0xbabec4, front: 0x1b1f2a, name: '5000系',
+      bands: [{ y: 1.35, h: 0.55, color: 0xd6006f }, { y: 0.82, h: 0.5, color: 0x16295c }], accent: 0xd6006f },
+    // 8000系：ステンレス銀に京王ブルーの帯＋細い赤ライン
+    KEIO_8000: { base: 0xd2d6db, roof: 0xaeb2b8, front: 0x222732, name: '8000系',
+      bands: [{ y: 2.15, h: 0.5, color: 0x0e4aa0 }, { y: 2.5, h: 0.12, color: 0xe4007f }], accent: 0x0e4aa0 },
+    // 7000系：ステンレス銀に青帯＋赤ライン（帯の位置を8000と少し変える）
+    KEIO_7000: { base: 0xd4d8dd, roof: 0xafb3b9, front: 0x242934, name: '7000系',
+      bands: [{ y: 2.2, h: 0.45, color: 0x0e4aa0 }, { y: 1.85, h: 0.12, color: 0xe4007f }], accent: 0x0e4aa0 },
+    // 9000系：ステンレス銀に青＋赤帯、前面は黒い顔
+    KEIO_9000: { base: 0xd8dce1, roof: 0xb2b6bc, front: 0x141821, name: '9000系',
+      bands: [{ y: 2.15, h: 0.5, color: 0x0e4aa0 }, { y: 2.5, h: 0.14, color: 0xe4007f }], accent: 0x0e4aa0 },
+    // 2000系：往年のライトグリーン塗装（レトロ）
+    KEIO_2000: { base: 0x86b96a, roof: 0x6f9e57, front: 0x5f8a49, name: '2000系',
+      bands: [{ y: 2.55, h: 0.16, color: 0xece5cc }], accent: 0xece5cc }
+  };
+
   // ---- シーンの基本 ----
   var scene = new THREE.Scene();
   scene.background = new THREE.Color(0xbcd4e6);
@@ -260,26 +280,6 @@
       return g;
     })();
   }
-
-  // 京王の車両形式（実車の帯色・塗装をもとにした低ポリ表現）
-  // 車体はローカルZが進行方向（前面は+Z端）、幅はX、高さはY。
-  var TRAIN_TYPES = {
-    // 5000系：京王ライナー。銀車体に赤〜紺のラッピング、黒い前面
-    KEIO_5000: { base: 0xe0e4e9, roof: 0xbabec4, front: 0x1b1f2a, name: '5000系',
-      bands: [{ y: 1.35, h: 0.55, color: 0xd6006f }, { y: 0.82, h: 0.5, color: 0x16295c }], accent: 0xd6006f },
-    // 8000系：ステンレス銀に京王ブルーの帯＋細い赤ライン
-    KEIO_8000: { base: 0xd2d6db, roof: 0xaeb2b8, front: 0x222732, name: '8000系',
-      bands: [{ y: 2.15, h: 0.5, color: 0x0e4aa0 }, { y: 2.5, h: 0.12, color: 0xe4007f }], accent: 0x0e4aa0 },
-    // 7000系：ステンレス銀に青帯＋赤ライン（帯の位置を8000と少し変える）
-    KEIO_7000: { base: 0xd4d8dd, roof: 0xafb3b9, front: 0x242934, name: '7000系',
-      bands: [{ y: 2.2, h: 0.45, color: 0x0e4aa0 }, { y: 1.85, h: 0.12, color: 0xe4007f }], accent: 0x0e4aa0 },
-    // 9000系：ステンレス銀に青＋赤帯、前面は黒い顔
-    KEIO_9000: { base: 0xd8dce1, roof: 0xb2b6bc, front: 0x141821, name: '9000系',
-      bands: [{ y: 2.15, h: 0.5, color: 0x0e4aa0 }, { y: 2.5, h: 0.14, color: 0xe4007f }], accent: 0x0e4aa0 },
-    // 2000系：往年のライトグリーン塗装（レトロ）
-    KEIO_2000: { base: 0x86b96a, roof: 0x6f9e57, front: 0x5f8a49, name: '2000系',
-      bands: [{ y: 2.55, h: 0.16, color: 0xece5cc }], accent: 0xece5cc }
-  };
 
   // 列車：形式ごとの塗装で、先頭〜後尾の車をつなぐ
   function makeTrain(typeKey, cars) {
