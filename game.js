@@ -140,10 +140,14 @@
       loaded++;
       if (loaded < PLATEAU_TILES.length) return;
       if (group.children.length === 0) return;         // 全滅ならOSM箱のまま
-      // 地面高さ合わせ：一番低い床がy=0に来るように全体を下げる
-      group.updateMatrixWorld(true);
-      var box = new THREE.Box3().setFromObject(group);
-      group.position.y = -box.min.y;
+      // 地面高さ合わせ：RTC中心（各タイルの重心≒地表の楕円体高）の中央値ぶん下げる。
+      // 形状の最低点方式は外れ値頂点で崩れたため、測量値ベースの決定論に変更
+      var ups = PLATEAU_TILES.map(function (t) {
+        var d = new THREE.Vector3(t.c[0] - C0[0], t.c[1] - C0[1], t.c[2] - C0[2]);
+        return d.x * Uv[0] + d.y * Uv[1] + d.z * Uv[2];
+      }).sort(function (a, b) { return a - b; });
+      var groundUp = ups[Math.floor(ups.length / 2)];
+      group.position.y = -groundUp;
       scene.add(group);
       if (osmMesh) { scene.remove(osmMesh); }          // 箱の街からPLATEAUの街へ差し替え
     }

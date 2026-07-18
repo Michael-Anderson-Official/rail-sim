@@ -56,7 +56,7 @@
 </script>
 <!-- 版はAPP_Vの1箇所で管理。デプロイ時はAPP_Vとversion.jsonを同じ数字に上げる -->
 <script>
-var APP_V = 10;
+var APP_V = 11;
 document.getElementById('verTag').textContent = '(v' + APP_V + ')';
 ['three.min.js','OrbitControls.js','DRACOLoader.js','GLTFLoader.js','plateau_manifest.js','segment.js','buildings.js','game.js'].forEach(function (s) {
   document.write('<scr' + 'ipt src="' + s + '?v=' + APP_V + '"><\/scr' + 'ipt>');
