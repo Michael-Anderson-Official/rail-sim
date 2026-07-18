@@ -2,3 +2,5 @@ node_modules/
 .DS_Store
 buildings_raw.json
 bbox.txt
+plateau/*.b3dm
+plateau_tileset.json

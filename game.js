@@ -70,7 +70,99 @@
   ground.position.y = -0.05;
   ground.receiveShadow = true;
   scene.add(ground);
-  buildRealBuildings();   // OSMの実在建物（buildings.js）を沿線に建てる
+  var osmMesh = buildRealBuildings();   // OSM箱建物（PLATEAU読込完了までのつなぎ＆フォールバック）
+  loadPlateau();                        // PLATEAU LOD2（実際の屋根形状の建物）を非同期で読み込む
+
+  // ---- PLATEAU LOD2建物の読み込み（b3dm→glb化済み・Draco圧縮） ----
+  function loadPlateau() {
+    if (typeof PLATEAU_TILES === 'undefined' || typeof fetch === 'undefined' ||
+        !THREE.GLTFLoader || !THREE.DRACOLoader) return;
+    var draco = new THREE.DRACOLoader();
+    draco.setDecoderPath('draco/');
+    var loader = new THREE.GLTFLoader();
+    loader.setDRACOLoader(draco);
+
+    // ECEF→ローカル(ENU)変換の基底（SEGMENT.centerを原点に）
+    var A = 6378137, E2 = 0.00669437999014;
+    var la = SEGMENT.center.lat * Math.PI / 180, lo = SEGMENT.center.lng * Math.PI / 180;
+    var Nrad = A / Math.sqrt(1 - E2 * Math.sin(la) * Math.sin(la));
+    var C0 = [Nrad * Math.cos(la) * Math.cos(lo), Nrad * Math.cos(la) * Math.sin(lo), Nrad * (1 - E2) * Math.sin(la)];
+    var Ev = [-Math.sin(lo), Math.cos(lo), 0];
+    var Nv = [-Math.sin(la) * Math.cos(lo), -Math.sin(la) * Math.sin(lo), Math.cos(la)];
+    var Uv = [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)];
+    // ecefベクトル→three(x=東, y=上, z=南)への回転行列
+    var Menu = new THREE.Matrix4().set(
+      Ev[0], Ev[1], Ev[2], 0,
+      Uv[0], Uv[1], Uv[2], 0,
+      -Nv[0], -Nv[1], -Nv[2], 0,
+      0, 0, 0, 1);
+    var RxB = new THREE.Matrix4().makeRotationX(Math.PI / 2);   // glTF y-up → ECEF z-up（規格どおりの向き）
+
+    function tileMatrix(centerEcef, useRx) {
+      var d = new THREE.Vector3(centerEcef[0] - C0[0], centerEcef[1] - C0[1], centerEcef[2] - C0[2]);
+      d.applyMatrix4(Menu);
+      var rot = new THREE.Matrix4().copy(Menu);
+      if (useRx) rot.multiply(RxB);
+      var m = new THREE.Matrix4().copy(rot);
+      m.setPosition(d);
+      return m;
+    }
+
+    var group = new THREE.Group();
+    var pmat = new THREE.MeshLambertMaterial({ color: 0xded8cc, side: THREE.DoubleSide });
+    var loaded = 0, failed = 0, mode = null;   // mode: true=Rx90あり / false=なし（初回タイルで自動判定）
+    PLATEAU_TILES.forEach(function (t) {
+      fetch('plateau/' + t.f).then(function (r) {
+        if (!r.ok) throw new Error('http ' + r.status);
+        return r.arrayBuffer();
+      }).then(function (ab) {
+        loader.parse(ab, '', function (g) {
+          var node = g.scene;
+          node.traverse(function (o) {
+            if (o.isMesh) {
+              if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
+              o.material = pmat;
+              o.castShadow = false; o.receiveShadow = true;
+            }
+          });
+          if (mode === null) {
+            // 高さ方向の広がりが小さくなる向きが正解（建物は横に広く縦に低い）
+            node.updateMatrixWorld(true);
+            var hB = yExtent(node, tileMatrix(t.c, true));
+            var hA = yExtent(node, tileMatrix(t.c, false));
+            mode = hB <= hA;
+          }
+          var holder = new THREE.Group();
+          holder.matrixAutoUpdate = false;
+          holder.matrix.copy(tileMatrix(t.c, mode));
+          holder.add(node);
+          group.add(holder);
+          done();
+        }, function () { failed++; done(); });
+      }).catch(function () { failed++; done(); });
+    });
+    function yExtent(node, mat) {
+      var box = new THREE.Box3();
+      var tmp = new THREE.Group();
+      tmp.matrixAutoUpdate = false; tmp.matrix.copy(mat);
+      tmp.add(node);
+      tmp.updateMatrixWorld(true);
+      box.setFromObject(tmp);
+      tmp.remove(node);
+      return box.max.y - box.min.y;
+    }
+    function done() {
+      loaded++;
+      if (loaded < PLATEAU_TILES.length) return;
+      if (group.children.length === 0) return;         // 全滅ならOSM箱のまま
+      // 地面高さ合わせ：一番低い床がy=0に来るように全体を下げる
+      group.updateMatrixWorld(true);
+      var box = new THREE.Box3().setFromObject(group);
+      group.position.y = -box.min.y;
+      scene.add(group);
+      if (osmMesh) { scene.remove(osmMesh); }          // 箱の街からPLATEAUの街へ差し替え
+    }
+  }
 
   // ---- 中心線（実カーブ）をスプライン化 ----
   // SEGMENT.points は [x(east), z(south)] のメートル。three.jsは (x, y, z)。
@@ -500,6 +592,7 @@
     var mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
     mesh.receiveShadow = true;
     scene.add(mesh);
+    return mesh;
   }
 
   // ====================== ヘルパー ======================
