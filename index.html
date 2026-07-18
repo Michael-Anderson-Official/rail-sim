@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>京王線 3D — 桜上水〜上北沢</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #bcd4e6; }
+  #app { position: fixed; inset: 0; }
+  .hud {
+    position: fixed; left: 0; right: 0; pointer-events: none;
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", sans-serif; color: #14203a;
+  }
+  #title { top: 10px; text-align: center; }
+  #title .t { font-size: 15px; font-weight: 700; }
+  #title .s { font-size: 11px; opacity: .7; }
+  #caption {
+    bottom: 16px; text-align: center; font-size: 13px; font-weight: 700;
+    background: rgba(255,255,255,.82); display: inline-block; left: 50%; transform: translateX(-50%);
+    position: fixed; padding: 7px 16px; border-radius: 20px; color: #14203a;
+  }
+  #hint { bottom: 54px; text-align: center; font-size: 10px; opacity: .55; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="title" class="hud"><div class="t">京王線 3D ｜ 桜上水〜上北沢</div><div class="s">実データの線路・2面4線・待避のデモ</div></div>
+<div id="hint" class="hud">指でドラッグ＝回転　／　2本指＝ズーム・移動</div>
+<div id="caption"></div>
+<script src="three.min.js"></script>
+<script src="OrbitControls.js"></script>
+<script src="segment.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
