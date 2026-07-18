@@ -240,7 +240,7 @@
     var pts = curve.getSpacedPoints(N);
     // バラスト帯
     var ballastGeo = ribbonGeometry(curve, N, 1.9, 0.02);
-    var ballast = new THREE.Mesh(ballastGeo, new THREE.MeshLambertMaterial({ color: 0x8a8378 }));
+    var ballast = new THREE.Mesh(ballastGeo, new THREE.MeshLambertMaterial({ color: 0x8a8378, side: THREE.DoubleSide }));
     ballast.receiveShadow = true; scene.add(ballast);
     // レール2本
     [GAUGE / 2, -GAUGE / 2].forEach(function (off) {
@@ -294,8 +294,8 @@
 
   // 桜上水の駅：2面の島式ホーム＋上屋
   function buildStation() {
-    var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4 });
-    var roofmat = new THREE.MeshLambertMaterial({ color: 0x3a4a5a });
+    var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4, side: THREE.DoubleSide });
+    var roofmat = new THREE.MeshLambertMaterial({ color: 0x3a4a5a, side: THREE.DoubleSide });
     [4, -4].forEach(function (side) {                  // 中心線から±4mに島式ホーム
       var half = 90, plat = new THREE.Group();
       var slabPts = [];
@@ -341,8 +341,8 @@
 
   // 上北沢：島式1面2線（上下線に挟まれた島ホーム）＋構内踏切側の小さな駅舎
   function buildKamikitazawa(uK) {
-    var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4 });
-    var roofmat = new THREE.MeshLambertMaterial({ color: 0x4a5a4a });
+    var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4, side: THREE.DoubleSide });
+    var roofmat = new THREE.MeshLambertMaterial({ color: 0x4a5a4a, side: THREE.DoubleSide });
     var LEN2 = 45 / LEN;                         // ±45m のホーム
     // 島ホーム＝中心線上（線路は±2mなので、その内側1面）
     var pts = [];
