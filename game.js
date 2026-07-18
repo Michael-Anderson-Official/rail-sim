@@ -200,12 +200,12 @@
     var t = local;                                   // 各停に乗る（待避中に特急が横を通過する）
     if (!t._curve) return;
     var L = t._curve.getLength();
-    var headDist = t._uHead * L - 1.2;               // 先頭のわずか後ろ＝運転台
+    var headDist = t._uHead * L + 0.9;               // 先頭面のすぐ外＝前面ガラス位置（車体の中に入らない）
     var u = Math.max(0.001, Math.min(0.999, headDist / L));
     var p = t._curve.getPointAt(u);
     var tan = t._curve.getTangentAt(u);
-    camera.position.set(p.x, 3.1, p.z);
-    camera.lookAt(p.x + tan.x * 60, 2.2, p.z + tan.z * 60);
+    camera.position.set(p.x, 3.0, p.z);
+    camera.lookAt(p.x + tan.x * 60, 2.0, p.z + tan.z * 60);
   }
 
   var last = performance.now(), booted = false;
