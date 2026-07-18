@@ -91,7 +91,7 @@
     var d = Math.abs(u - uSakura);
     if (d > WINDOW) return 0;
     var t = 1 - d / WINDOW;                  // 端0→中央1
-    return smoothstep(t) * 4;                // 最大4mふくらむ
+    return smoothstep(t) * 6.5;              // 最大6.5mふくらむ（島ホームを挟める間隔）
   }
   // 上北沢の島式ホームぶんのふくらみ：駅の前後で上下線が外へ開いて島を挟む
   var KAMI_WINDOW = 90 / LEN;
@@ -99,7 +99,7 @@
     var d = Math.abs(u - uKami);
     if (d > KAMI_WINDOW) return 0;
     var t = 1 - d / KAMI_WINDOW;
-    return smoothstep(t) * 1.9;              // 最大1.9m外へ（島ホーム幅を確保）
+    return smoothstep(t) * 1.3;              // 最大1.3m外へ（島ホーム幅を確保）
   }
 
   // 横オフセット付きの線路カーブを作る（法線方向へずらす）
@@ -118,10 +118,10 @@
 
   // 4本の線路：本線±2m（上北沢では島ホームを挟んで外へ開く）、待避線は桜上水で外へふくらむ
   var GAUGE = 1.6;
-  var trackUpThrough = offsetCurve(function (u) { return 2 + kamiBump(u); });    // 上り本線
-  var trackDnThrough = offsetCurve(function (u) { return -2 - kamiBump(u); });   // 下り本線（通過）
-  var trackUpLoop = offsetCurve(function (u) { return 2 + kamiBump(u) + loopBump(u); });   // 上り待避
-  var trackDnLoop = offsetCurve(function (u) { return -2 - kamiBump(u) - loopBump(u); });  // 下り待避
+  var trackUpThrough = offsetCurve(function (u) { return 2.2 + kamiBump(u); });    // 上り本線
+  var trackDnThrough = offsetCurve(function (u) { return -2.2 - kamiBump(u); });   // 下り本線（通過）
+  var trackUpLoop = offsetCurve(function (u) { return 2.2 + kamiBump(u) + loopBump(u); });   // 上り待避
+  var trackDnLoop = offsetCurve(function (u) { return -2.2 - kamiBump(u) - loopBump(u); });  // 下り待避
 
   [trackUpThrough, trackDnThrough, trackUpLoop, trackDnLoop].forEach(function (c) { buildTrack(c); });
 
@@ -296,23 +296,25 @@
   function buildStation() {
     var pmat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4, side: THREE.DoubleSide });
     var roofmat = new THREE.MeshLambertMaterial({ color: 0x3a4a5a, side: THREE.DoubleSide });
-    [4, -4].forEach(function (side) {                  // 中心線から±4mに島式ホーム
-      var half = 90, plat = new THREE.Group();
+    // 島式ホームは「本線(±2.2)と待避線(±8.7)の真ん中」＝±5.45。幅は車両限界に合わせる
+    [5.45, -5.45].forEach(function (side) {
       var slabPts = [];
       for (var i = 0; i <= 40; i++) {
-        var u = uSakura - WINDOW * 0.9 + (WINDOW * 1.8) * (i / 40);
+        var u = uSakura - WINDOW * 0.55 + (WINDOW * 1.1) * (i / 40);   // 待避線が十分開いている区間だけ
         if (u < 0 || u > 1) continue;
         var p = center.getPointAt(u), tan = center.getTangentAt(u);
         var nx = -tan.z, nz = tan.x;
-        slabPts.push(new THREE.Vector3(p.x + nx * side, 0, p.z + nz * side));
+        // ホーム中心も膨らみに追従（本線と待避線の中点）
+        var mid = side > 0 ? (2.2 + 2.2 + loopBump(u)) / 2 : -(2.2 + 2.2 + loopBump(u)) / 2;
+        slabPts.push(new THREE.Vector3(p.x + nx * mid, 0, p.z + nz * mid));
       }
       if (slabPts.length < 2) return;
       var slabCurve = new THREE.CatmullRomCurve3(slabPts);
-      var slab = new THREE.Mesh(ribbonRaised(slabCurve, slabPts.length * 3, 2.2, 0.9),
+      var slab = new THREE.Mesh(ribbonRaised(slabCurve, slabPts.length * 3, 1.45, 0.9),
         pmat);
       slab.castShadow = true; slab.receiveShadow = true; scene.add(slab);
       // 上屋（薄い屋根）
-      var roof = new THREE.Mesh(ribbonRaised(slabCurve, slabPts.length * 3, 2.6, 4.4), roofmat);
+      var roof = new THREE.Mesh(ribbonRaised(slabCurve, slabPts.length * 3, 1.7, 4.4), roofmat);
       scene.add(roof);
     });
   }
@@ -353,9 +355,9 @@
     }
     if (pts.length >= 2) {
       var cv = new THREE.CatmullRomCurve3(pts);
-      var slab = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 1.9, 0.9), pmat);
+      var slab = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 1.7, 0.9), pmat);
       slab.castShadow = true; slab.receiveShadow = true; scene.add(slab);
-      var roof = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 2.2, 4.2), roofmat);
+      var roof = new THREE.Mesh(ribbonGeometry(cv, pts.length * 3, 1.9, 4.2), roofmat);
       scene.add(roof);
     }
     // 駅舎（ホーム端の脇に小さな箱＝駅出入口のイメージ）
