@@ -74,7 +74,44 @@
   ground.receiveShadow = true;
   scene.add(ground);
   var osmMesh = buildRealBuildings();   // OSM箱建物（PLATEAU読込完了までのつなぎ＆フォールバック）
+  buildRoads();                         // OSM実道路（甲州街道〜生活道路・歩道）
   loadPlateau();                        // PLATEAU LOD2（実際の屋根形状の建物）を非同期で読み込む
+
+  // ---- 実在道路（roads.js: OSM highwayのポリライン）を帯メッシュ化 ----
+  function buildRoads() {
+    if (typeof ROADS === 'undefined') return;
+    var geos = [null, null];                                  // k=0 車道 / k=1 歩道系
+    var pos = [[], []], idx = [[], []];
+    for (var r = 0; r < ROADS.length; r++) {
+      var rd = ROADS[r], pts = rd.p, hw = rd.w / 2, k = rd.k;
+      var P = pos[k], I = idx[k];
+      for (var i = 0; i < pts.length; i++) {
+        // 各頂点の進行方向（前後セグメントの平均）に対する法線でオフセット
+        var p0 = pts[Math.max(0, i - 1)], p1 = pts[Math.min(pts.length - 1, i + 1)];
+        var dx = p1[0] - p0[0], dz = p1[1] - p0[1];
+        var L = Math.sqrt(dx * dx + dz * dz) || 1;
+        var nx = -dz / L, nz = dx / L;
+        var base = P.length / 3;
+        P.push(pts[i][0] + nx * hw, 0, pts[i][1] + nz * hw,
+               pts[i][0] - nx * hw, 0, pts[i][1] - nz * hw);
+        if (i > 0) I.push(base - 2, base - 1, base, base - 1, base + 1, base);
+      }
+    }
+    var mats = [
+      new THREE.MeshLambertMaterial({ color: 0x62666e, polygonOffset: true, polygonOffsetFactor: -2 }),
+      new THREE.MeshLambertMaterial({ color: 0x9a9c96, polygonOffset: true, polygonOffsetFactor: -1 })
+    ];
+    for (var k2 = 0; k2 < 2; k2++) {
+      var g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos[k2], 3));
+      g.setIndex(idx[k2]);
+      g.computeVertexNormals();
+      var mesh = new THREE.Mesh(g, mats[k2]);
+      mesh.position.y = -0.02 + k2 * 0.005;   // 地面-0.05とバラスト0.02の間（踏切は道路がレール下に潜る見え方）
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+    }
+  }
 
   // ---- PLATEAU LOD2建物の読み込み（b3dm→glb化済み・Draco圧縮） ----
   function loadPlateau() {
