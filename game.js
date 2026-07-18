@@ -109,7 +109,35 @@
     }
 
     var group = new THREE.Group();
-    var pmat = new THREE.MeshLambertMaterial({ color: 0xded8cc, side: THREE.DoubleSide });
+    var pmat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    // 壁と屋根のパレット（建物IDで1軒ずつ色を変える）
+    var WALLS = [[0.93, 0.91, 0.86], [0.88, 0.86, 0.82], [0.92, 0.92, 0.92], [0.86, 0.82, 0.75], [0.90, 0.87, 0.80], [0.84, 0.86, 0.88], [0.95, 0.93, 0.88]];
+    var ROOFS = [[0.42, 0.45, 0.50], [0.52, 0.38, 0.33], [0.38, 0.42, 0.38], [0.45, 0.45, 0.47], [0.55, 0.48, 0.40], [0.35, 0.38, 0.45]];
+    // 屋根/壁の塗り分け：頂点法線がタイルの「上」を向いていれば屋根
+    function paintTile(node, rotMatrix) {
+      var e = rotMatrix.elements;
+      var ux = e[1], uy = e[5], uz = e[9];   // モデル空間での「上」ベクトル（回転行列の2行目）
+      node.traverse(function (o) {
+        if (!o.isMesh) return;
+        var g = o.geometry;
+        if (!g.attributes.normal) g.computeVertexNormals();
+        var nor = g.attributes.normal, n = g.attributes.position.count;
+        var bid = g.getAttribute('_batchid');
+        var col = new Float32Array(n * 3);
+        for (var i = 0; i < n; i++) {
+          var d = nor.getX(i) * ux + nor.getY(i) * uy + nor.getZ(i) * uz;
+          var id = bid ? (bid.getX(i) | 0) : 0;
+          var pal, c;
+          if (d > 0.55) { pal = ROOFS; c = pal[(id * 2654435761 >>> 0) % pal.length]; }
+          else if (d < -0.5) { c = [0.30, 0.30, 0.32]; }
+          else { pal = WALLS; c = pal[(id * 40503 >>> 0) % pal.length]; }
+          col[i * 3] = c[0]; col[i * 3 + 1] = c[1]; col[i * 3 + 2] = c[2];
+        }
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        o.material = pmat;
+        o.castShadow = false; o.receiveShadow = true;
+      });
+    }
     var loaded = 0, failed = 0;
     // 軸の向きはDracoを実デコードして検証済み：glTF y-up → ECEF z-up の Rx(+90°) が正
     // （node側の検証で up=80..98m ＝標高＋ジオイド＋建物高と一致することを確認）
@@ -120,17 +148,12 @@
       }).then(function (ab) {
         loader.parse(ab, '', function (g) {
           var node = g.scene;
-          node.traverse(function (o) {
-            if (o.isMesh) {
-              if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
-              o.material = pmat;
-              o.castShadow = false; o.receiveShadow = true;
-            }
-          });
+          var m = tileMatrix(t.c, true);
+          paintTile(node, m);   // 屋根/壁/建物ごとの塗り分け
           var holder = new THREE.Group();
           holder.matrixAutoUpdate = false;
           // タイルごとに実測した地面高(t.g)で接地（Draco実デコードで事前計算済み）
-          holder.matrix.makeTranslation(0, -(t.g || 80), 0).multiply(tileMatrix(t.c, true));
+          holder.matrix.makeTranslation(0, -(t.g || 80), 0).multiply(m);
           holder.add(node);
           group.add(holder);
           done();
@@ -199,6 +222,44 @@
   var trackDnLoop = offsetCurve(function (u) { return -2.2 - kamiBump(u) - loopBump(u); });  // 下り待避
 
   [trackUpThrough, trackDnThrough, trackUpLoop, trackDnLoop].forEach(function (c) { buildTrack(c); });
+  plantLineSideTrees();   // 沿線の並木（線路とPLATEAU建物の間の緩衝帯に植える）
+
+  function plantLineSideTrees() {
+    var spacing = 34, jitter = 10;
+    var count = Math.floor(LEN / spacing) * 2;
+    var crown = new THREE.InstancedMesh(
+      new THREE.ConeGeometry(2.2, 5.2, 7),
+      new THREE.MeshLambertMaterial({ color: 0x4d7a45 }), count);
+    var trunk = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.28, 0.36, 2.4, 5),
+      new THREE.MeshLambertMaterial({ color: 0x6b5236 }), count);
+    var m = new THREE.Matrix4();
+    var idx = 0;
+    for (var side = -1; side <= 1; side += 2) {
+      for (var s = spacing / 2; s < LEN && idx < count; s += spacing) {
+        var u = s / LEN;
+        var d = Math.abs(u - uSakura);
+        if (d < WINDOW) continue;                      // 駅構内には植えない
+        if (Math.abs(u - uKami) < KAMI_WINDOW) continue;
+        var p = center.getPointAt(Math.min(1, u)), tan = center.getTangentAt(Math.min(1, u));
+        var nx = -tan.z, nz = tan.x;
+        var off = side * (10.5 + ((idx * 7919) % 100) / 100 * jitter);
+        var px = p.x + nx * off, pz = p.z + nz * off;
+        var sc = 0.8 + ((idx * 104729) % 100) / 100 * 0.7;
+        m.makeScale(sc, sc, sc);
+        m.setPosition(px, 3.6 * sc, pz);
+        crown.setMatrixAt(idx, m);
+        m.makeScale(1, sc, 1);
+        m.setPosition(px, 1.1 * sc, pz);
+        trunk.setMatrixAt(idx, m);
+        idx++;
+      }
+      if (idx >= count) break;
+    }
+    crown.count = idx; trunk.count = idx;
+    crown.castShadow = true;
+    scene.add(crown); scene.add(trunk);
+  }
 
   // ---- 桜上水の駅（2面4線：島式ホーム2面＋橋上駅舎） ----
   buildStation();
