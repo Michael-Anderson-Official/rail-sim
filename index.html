@@ -35,6 +35,16 @@
 <div id="title" class="hud"><div class="t">京王線 3D ｜ 桜上水〜上北沢</div><div class="s">実データの線路・2面4線・待避のデモ</div></div>
 <div id="hint" class="hud">指でドラッグ＝回転　／　2本指＝ズーム・移動</div>
 <div id="caption"></div>
+<div id="boot" style="position:fixed; top:48%; left:0; right:0; text-align:center; font-size:13px; color:#4a5a6a; font-family:sans-serif; pointer-events:none;">起動中…</div>
+<pre id="err" style="display:none; position:fixed; left:8px; right:8px; bottom:70px; margin:0; padding:10px; background:rgba(190,0,0,.92); color:#fff; font-size:11px; line-height:1.4; white-space:pre-wrap; z-index:99; border-radius:10px; max-height:44%; overflow:auto;"></pre>
+<script>
+  window.__boot = function (msg) { var e = document.getElementById('err'); if (e) { e.style.display = 'block'; e.textContent += msg + '\n'; } };
+  window.addEventListener('error', function (ev) {
+    window.__boot('ERR: ' + (ev.message || '') + '  @' + String(ev.filename || '').split('/').pop() + ':' + (ev.lineno || ''));
+  });
+  window.addEventListener('unhandledrejection', function (ev) { window.__boot('REJECT: ' + (ev.reason && (ev.reason.message || ev.reason))); });
+  if (!window.WebGLRenderingContext) window.__boot('この端末/ブラウザはWebGL非対応の可能性');
+</script>
 <script src="three.min.js"></script>
 <script src="OrbitControls.js"></script>
 <script src="segment.js"></script>

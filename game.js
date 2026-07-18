@@ -145,12 +145,18 @@
   }
 
   // ---- メインループ ----
-  var last = performance.now();
+  var last = performance.now(), booted = false;
   function animate(now) {
     var dt = Math.min((now - last) / 1000, 0.05); last = now;
-    updateTrains(dt);
-    controls.update();
-    renderer.render(scene, camera);
+    try {
+      updateTrains(dt);
+      controls.update();
+      renderer.render(scene, camera);
+    } catch (e) {
+      if (window.__boot) window.__boot('LOOP: ' + (e && e.message) + '\n' + (e && e.stack ? String(e.stack).split('\n').slice(0, 3).join('\n') : ''));
+      return;   // ループを止めて原因を表示（暴走 log を防ぐ）
+    }
+    if (!booted) { booted = true; var be = document.getElementById('boot'); if (be) be.style.display = 'none'; }
     requestAnimationFrame(animate);
   }
   controls.target.copy(pSakura);
