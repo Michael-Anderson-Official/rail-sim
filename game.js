@@ -194,7 +194,7 @@
     // 壁と屋根のパレット（建物IDで1軒ずつ色を変える）
     var WALLS = [[0.93, 0.91, 0.86], [0.88, 0.86, 0.82], [0.92, 0.92, 0.92], [0.86, 0.82, 0.75], [0.90, 0.87, 0.80], [0.84, 0.86, 0.88], [0.95, 0.93, 0.88]];
     var ROOFS = [[0.42, 0.45, 0.50], [0.52, 0.38, 0.33], [0.38, 0.42, 0.38], [0.45, 0.45, 0.47], [0.55, 0.48, 0.40], [0.35, 0.38, 0.45]];
-    // 線路中心線のサンプル点（8m刻み）。線路帯に重なるPLATEAU建物（実在の駅ホーム等）の除去に使う
+    // 線路中心線のサンプル点（8m刻み）。線路帯13m以内に重なるPLATEAU建物（実在の駅舎等）の除去に使う
     var trackPts = [];
     (function () {
       var P = SEGMENT.points;
@@ -207,6 +207,7 @@
     })();
 
     // 屋根/壁の塗り分け＋線路帯の建物除去
+    var CORRIDOR2 = 13 * 13;   // buildings.js生成時(gen_map.mjs)のCORRIDOR=13mと揃える
     function paintTile(node, rotMatrix, worldMatrix) {
       var inv = new THREE.Matrix4().copy(worldMatrix).invert();
       var sink = new THREE.Vector3(0, -500, 0).applyMatrix4(inv);   // 「消す」＝この1点に潰す
@@ -215,20 +216,17 @@
         if (!o.isMesh) return;
         var g = o.geometry, pos = g.attributes.position, bid = g.getAttribute('_batchid');
         if (!bid) return;
-        var sums = {}, n = pos.count;
-        for (var i = 0; i < n; i++) {
-          tmpV.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(worldMatrix);
-          var id = bid.getX(i) | 0;
-          var s = sums[id] || (sums[id] = [0, 0, 0]);
-          s[0] += tmpV.x; s[1] += tmpV.z; s[2]++;
-        }
+        var n = pos.count;
         var hidden = {};
-        // 線路帯(中心線8m以内)の実在構造物は駅舎含め全区間で除去（前面展望を優先。v16の駅周辺例外は撤廃）
-        for (var idk in sums) {
-          var s2 = sums[idk], cx = s2[0] / s2[2], cz = s2[1] / s2[2];
+        // 建物の重心ではなく頂点1つずつで判定(大きな建物は重心が遠くても端が線路に
+        // かかることがあるため。実在の桜上水駅・下高井戸駅の駅舎はこれで検出される)
+        for (var i = 0; i < n; i++) {
+          var id = bid.getX(i) | 0;
+          if (hidden[id]) continue;
+          tmpV.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(worldMatrix);
           for (var p = 0; p < trackPts.length; p++) {
-            var dx = cx - trackPts[p][0], dz = cz - trackPts[p][1];
-            if (dx * dx + dz * dz < 64) { hidden[idk] = 1; break; }
+            var dx = tmpV.x - trackPts[p][0], dz = tmpV.z - trackPts[p][1];
+            if (dx * dx + dz * dz < CORRIDOR2) { hidden[id] = 1; break; }
           }
         }
         for (var j = 0; j < n; j++) {
@@ -451,8 +449,9 @@
   buildBridgeStationHouse();
   // ---- 上北沢の駅（島式1面2線＋小さな駅舎） ----
   buildKamikitazawa(uKami);
-  // ---- 下高井戸の駅（相対式2面2線。カーブ上のホーム） ----
+  // ---- 下高井戸の駅（相対式2面2線。カーブ上のホーム＋実在の駅舎相当を独自に構築） ----
   buildShimotakaido(uShimo);
+  buildShimotakaidoHouse(uShimo);
   // ---- 高架橋（上北沢〜八幡山〜区間西端。実際に高架化済みの区間）＋八幡山の高架下駅舎 ----
   buildViaduct();
   buildElevatedStationHouse(uHachi);
@@ -686,6 +685,31 @@
       var roof = new THREE.Mesh(ribbonRaised(cv, pts.length * 3, 1.6, 4.4), roofmat);
       scene.add(roof);
     });
+  }
+
+  // 下高井戸の駅舎：実在の「下高井戸駅」建物(PLATEAU/OSM実測・幅約87m・高さ13.9m)は
+  // 線路帯に食い込むため除去対象になる。同等の存在感をゲーム独自の低ポリ建物として再現する
+  // (ホーム外縁6.6mより外の側道沿いに、実物より控えめな長さの2階建て駅ビル風の箱で)
+  function buildShimotakaidoHouse(uStn) {
+    var p = center.getPointAt(uStn), tan = center.getTangentAt(uStn);
+    var nx = -tan.z, nz = tan.x;
+    var off = 11.5;   // ホーム外縁(6.6m)+通路ぶんの余裕をとって外側に配置
+    var g = new THREE.Group();
+    g.position.set(p.x + nx * off, railY(uStn), p.z + nz * off);
+    g.rotation.y = Math.atan2(tan.x, tan.z);
+    var wall = new THREE.MeshLambertMaterial({ color: 0xe4ded0 });
+    var glass = new THREE.MeshStandardMaterial({ color: 0x9fc4d8, metalness: 0.4, roughness: 0.3 });
+    var roofMat = new THREE.MeshLambertMaterial({ color: 0x5a4a42 });
+    var LEN_B = 46, W = 8, H = 11;
+    var body = new THREE.Mesh(new THREE.BoxGeometry(W, H, LEN_B), wall);
+    body.position.y = H / 2; body.castShadow = true; body.receiveShadow = true; g.add(body);
+    var win1 = new THREE.Mesh(new THREE.BoxGeometry(W + 0.05, 1.6, LEN_B * 0.94), glass);
+    win1.position.y = H * 0.32; g.add(win1);
+    var win2 = new THREE.Mesh(new THREE.BoxGeometry(W + 0.05, 1.6, LEN_B * 0.94), glass);
+    win2.position.y = H * 0.72; g.add(win2);
+    var top = new THREE.Mesh(new THREE.BoxGeometry(W + 1.2, 0.5, LEN_B + 1.6), roofMat);
+    top.position.y = H + 0.25; g.add(top);
+    scene.add(g);
   }
 
   // 桜上水の橋上駅舎：線路をまたぐ箱＋支柱
